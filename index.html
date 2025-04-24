@@ -3,38 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beer Board</title>
+    <title>Beer Board (Synced)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#374151"> <style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <meta name="theme-color" content="#374151">
+    <style>
         body {
             font-family: 'Inter', sans-serif;
-            overscroll-behavior: none; /* Prevent pull-to-refresh */
+            overscroll-behavior: none;
         }
-        /* Simple transition for button feedback */
         button {
             transition: transform 0.1s ease-in-out, background-color 0.1s ease;
         }
         button:active {
             transform: scale(0.95);
         }
-        /* Custom scrollbar for leaderboard if needed */
-        .leaderboard-scroll::-webkit-scrollbar {
-            width: 6px;
+        .leaderboard-scroll::-webkit-scrollbar { width: 6px; }
+        .leaderboard-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .leaderboard-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+        .leaderboard-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        /* Style for delete button */
+        .delete-user-btn {
+            opacity: 0.5;
+            transition: opacity 0.2s ease;
         }
-        .leaderboard-scroll::-webkit-scrollbar-track {
-            background: #f1f5f9; /* slate-100 */
-            border-radius: 10px;
-        }
-        .leaderboard-scroll::-webkit-scrollbar-thumb {
-            background: #94a3b8; /* slate-400 */
-            border-radius: 10px;
-        }
-        .leaderboard-scroll::-webkit-scrollbar-thumb:hover {
-            background: #64748b; /* slate-500 */
+        .delete-user-btn:hover {
+            opacity: 1;
         }
     </style>
 </head>
@@ -43,8 +40,17 @@
     <div class="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
         <h1 class="text-2xl md:text-3xl font-bold text-center mb-6 text-gray-800 dark:text-white">🍻 Beer Board 🍻</h1>
 
+        <div id="loading-indicator" class="text-center my-4 hidden">
+            <p class="text-gray-500 dark:text-gray-400">Loading...</p>
+        </div>
+
+        <div id="error-message" class="text-center my-4 p-3 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 rounded hidden">
+            <p id="error-text"></p>
+            <button id="clear-error-btn" class="mt-2 text-xs text-red-600 dark:text-red-300 hover:underline">Dismiss</button>
+        </div>
+
         <div id="user-setup" class="mb-6">
-            <label for="user-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Who are you?</label>
+            <label for="username-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Who are you?</label>
             <div class="flex gap-2">
                 <input type="text" id="username-input" placeholder="Enter your name" class="flex-grow block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-gray-200 p-2">
                 <button id="set-username-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800">Set Name</button>
@@ -64,32 +70,24 @@
         </div>
 
         <div id="leaderboard-section" class="hidden">
-            <h2 class="text-xl font-semibold mb-4 text-center">Leaderboard</h2>
+            <h2 class="text-xl font-semibold mb-2 text-center">Leaderboard</h2>
+            <div class="text-center mb-4 text-lg text-gray-600 dark:text-gray-300">
+                Total Drinks: <span id="total-drink-count" class="font-bold">0</span>
+            </div>
             <div id="leaderboard" class="space-y-3 max-h-60 overflow-y-auto leaderboard-scroll pr-2">
-                <p class="text-center text-gray-500 dark:text-gray-400">No drinks recorded yet.</p>
+                <p class="text-center text-gray-500 dark:text-gray-400">Loading leaderboard...</p>
             </div>
              <button id="reset-all-btn" class="mt-6 w-full px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-semibold rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800">Reset All Counts</button>
         </div>
     </div>
 
     <script>
-        // Check if service workers are supported
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                // Register the service worker
-                navigator.serviceWorker.register('/sw.js') // Path relative to the root
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('ServiceWorker registration failed: ', error);
-                    });
-            });
-        }
-    </script>
+        // --- Configuration ---
+        // IMPORTANT: Replace with the actual URL of your backend API
+        // If running locally for testing, it might be 'http://127.0.0.1:5000'
+        const API_BASE_URL = '/api'; // Use relative path if frontend is served by Flask, otherwise full URL
 
-    <script>
-        // Get references to DOM elements
+        // --- DOM Elements ---
         const userSetupDiv = document.getElementById('user-setup');
         const usernameInput = document.getElementById('username-input');
         const setUsernameBtn = document.getElementById('set-username-btn');
@@ -102,209 +100,356 @@
         const changeUserBtn = document.getElementById('change-user-btn');
         const leaderboardSection = document.getElementById('leaderboard-section');
         const leaderboardDiv = document.getElementById('leaderboard');
+        const totalDrinkCountSpan = document.getElementById('total-drink-count');
         const resetAllBtn = document.getElementById('reset-all-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessageDiv = document.getElementById('error-message');
+        const errorTextP = document.getElementById('error-text');
+        const clearErrorBtn = document.getElementById('clear-error-btn');
 
-        // Define keys for localStorage
-        const STORAGE_KEY = 'beerBoardDrinks'; // Updated storage key
-        const CURRENT_USER_KEY = 'beerBoardCurrentUser'; // Updated current user key
 
-        // Initialize data object and current user variable
-        let drinkData = {}; // { username: count, ... }
-        let currentUser = null;
+        // --- State ---
+        let currentUser = null; // Store the currently selected username
+        const CURRENT_USER_LOCAL_STORAGE_KEY = 'beerBoardCurrentUserLocal'; // Key to remember user in browser
 
-        // --- Initialization ---
-        // Load data from localStorage when the page loads
-        function loadData() {
-            const storedData = localStorage.getItem(STORAGE_KEY);
-            const storedUser = localStorage.getItem(CURRENT_USER_KEY);
-
-            // Try parsing stored data, handle potential errors
-            if (storedData) {
-                try {
-                    drinkData = JSON.parse(storedData);
-                } catch (e) {
-                    console.error("Error parsing stored drink data:", e);
-                    drinkData = {}; // Reset if data is corrupt
+        // --- API Helper Functions ---
+        async function fetchData() {
+            showLoading();
+            try {
+                const response = await fetch(`${API_BASE_URL}/data`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-            } else {
-                drinkData = {}; // Initialize if nothing is stored
-            }
-
-            // Check if there's a stored user and if they exist in the data
-            if (storedUser && drinkData.hasOwnProperty(storedUser)) {
-                 currentUser = storedUser;
-                 showCounterView(); // Show the counter view for the logged-in user
-            } else {
-                 showUserSetupView(); // Show the user setup view if no valid user is found
-            }
-            updateDisplay(); // Perform an initial display update
-        }
-
-        // Save the current state (drinkData and currentUser) to localStorage
-        function saveData() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(drinkData));
-            if (currentUser) {
-                localStorage.setItem(CURRENT_USER_KEY, currentUser);
-            } else {
-                 localStorage.removeItem(CURRENT_USER_KEY); // Remove user key if no one is logged in
+                const data = await response.json();
+                hideLoading();
+                clearError();
+                return data; // Expected format: { users: { name: count, ... }, total_drinks: number }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                showError(`Failed to load data: ${error.message}. Is the backend running?`);
+                hideLoading();
+                return null; // Indicate failure
             }
         }
 
-        // --- View Management ---
-        // Show the initial user name input screen
-        function showUserSetupView() {
-            userSetupDiv.classList.remove('hidden');
-            counterSection.classList.add('hidden');
-            leaderboardSection.classList.add('hidden'); // Hide leaderboard during setup
-            usernameInput.value = ''; // Clear input field
-            usernameInput.focus(); // Focus on the input field
-            currentUser = null; // Clear the current user variable
-            localStorage.removeItem(CURRENT_USER_KEY); // Remove current user from storage
-        }
-
-        // Show the drink counter and leaderboard screen
-        function showCounterView() {
-            if (!currentUser) return; // Exit if no current user is set
-
-            userSetupDiv.classList.add('hidden');
-            counterSection.classList.remove('hidden');
-            leaderboardSection.classList.remove('hidden'); // Show leaderboard along with the counter
-            currentUsernameSpan.textContent = currentUser; // Display the current user's name
-            updateDisplay(); // Ensure count and leaderboard are up-to-date
-        }
-
-        // --- Event Handlers ---
-        // Handle the "Set Name" button click
-        setUsernameBtn.addEventListener('click', () => {
-            const name = usernameInput.value.trim(); // Get and trim the entered name
-            if (name) {
-                usernameError.classList.add('hidden'); // Hide error message
-                currentUser = name;
-                // Add user to data if they don't exist, initializing count to 0
-                if (!drinkData.hasOwnProperty(currentUser)) {
-                    drinkData[currentUser] = 0;
-                }
-                saveData(); // Save the new user and potentially updated data
-                showCounterView(); // Switch to the counter view
-            } else {
-                usernameError.classList.remove('hidden'); // Show error if name is empty
-            }
-        });
-
-        // Allow setting the name by pressing Enter in the input field
-        usernameInput.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Prevent default form submission behavior
-                setUsernameBtn.click(); // Simulate a click on the Set Name button
-            }
-        });
-
-        // Handle the "Add Drink" button click
-        addDrinkBtn.addEventListener('click', () => {
-            // Increment count if a user is logged in and exists in data
-            if (currentUser && drinkData.hasOwnProperty(currentUser)) {
-                drinkData[currentUser]++;
-                updateDisplay(); // Update the screen
-                saveData(); // Save the new count
-            }
-        });
-
-        // Handle the "Remove Drink" button click
-        removeDrinkBtn.addEventListener('click', () => {
-            // Decrement count if user exists, has data, and count > 0
-            if (currentUser && drinkData.hasOwnProperty(currentUser) && drinkData[currentUser] > 0) {
-                drinkData[currentUser]--;
-                updateDisplay(); // Update the screen
-                saveData(); // Save the new count
-            }
-        });
-
-        // Handle the "Change User" button click
-        changeUserBtn.addEventListener('click', () => {
-            showUserSetupView(); // Go back to the user setup screen
-        });
-
-        // Handle the "Reset All Counts" button click
-        resetAllBtn.addEventListener('click', () => {
-            // Ask for confirmation before resetting
-            if (confirm("Are you sure you want to reset all drink counts for everyone? This cannot be undone.")) {
-                // Reset counts to 0 for all users but keep their names
-                Object.keys(drinkData).forEach(name => {
-                    drinkData[name] = 0;
+        async function postData(url, body) {
+             showLoading();
+             try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
                 });
-                updateDisplay(); // Update the screen
-                saveData(); // Save the reset data
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || 'No details'}`);
+                }
+                 hideLoading();
+                 clearError();
+                 // Return parsed JSON if available, otherwise indicate success
+                 return await response.json().catch(() => ({ success: true }));
+            } catch (error) {
+                console.error('Error posting data:', error);
+                showError(`Operation failed: ${error.message}`);
+                hideLoading();
+                return null; // Indicate failure
             }
-        });
+        }
+
+         async function deleteResource(url) {
+            showLoading();
+            try {
+                const response = await fetch(url, { method: 'DELETE' });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || 'No details'}`);
+                }
+                hideLoading();
+                clearError();
+                 // Return parsed JSON if available, otherwise indicate success
+                return await response.json().catch(() => ({ success: true }));
+            } catch (error) {
+                console.error('Error deleting resource:', error);
+                showError(`Operation failed: ${error.message}`);
+                hideLoading();
+                return null; // Indicate failure
+            }
+        }
 
         // --- UI Update Functions ---
-        // Update the displayed drink count and re-render the leaderboard
-        function updateDisplay() {
-            // Update the count span if a user is logged in and has data
-            if (currentUser && drinkData.hasOwnProperty(currentUser)) {
-                drinkCountSpan.textContent = drinkData[currentUser];
-            } else {
-                drinkCountSpan.textContent = '0'; // Default to 0 if no user or data
-            }
-            renderLeaderboard(); // Refresh the leaderboard display
+         function showLoading() {
+            loadingIndicator.classList.remove('hidden');
         }
 
-        // Render the leaderboard based on the current drinkData
-        function renderLeaderboard() {
-            leaderboardDiv.innerHTML = ''; // Clear the existing leaderboard content
+        function hideLoading() {
+            loadingIndicator.classList.add('hidden');
+        }
 
-            // Convert the drinkData object into an array of [name, count] pairs
-            const sortedUsers = Object.entries(drinkData)
-                                    // Sort primarily by count (descending)
-                                    .sort(([nameA, countA], [nameB, countB]) => {
-                                        if (countB !== countA) {
-                                            return countB - countA; // Higher count first
-                                        }
-                                        // If counts are equal, sort alphabetically by name (ascending)
-                                        return String(nameA).localeCompare(String(nameB));
-                                    });
+         function showError(message) {
+            errorTextP.textContent = message;
+            errorMessageDiv.classList.remove('hidden');
+        }
 
-            // Display a message if there are no users yet
-            if (sortedUsers.length === 0) {
-                 leaderboardDiv.innerHTML = '<p class="text-center text-gray-500 dark:text-gray-400">Enter your name to start tracking!</p>';
+        function clearError() {
+            errorTextP.textContent = '';
+            errorMessageDiv.classList.add('hidden');
+        }
+
+        function updateDisplay(data) {
+            if (!data || !data.users) {
+                 // Don't update if data fetch failed, error message is already shown
+                 // Or if data is missing the users object
+                 renderLeaderboard({}, 0); // Render empty leaderboard
                  return;
             }
 
-            // Create and append list items for each user
-            sortedUsers.forEach(([name, count], index) => {
-                const rank = index + 1; // Calculate rank (1-based index)
-                const isCurrentUser = name === currentUser; // Check if this entry is the current user
+            const { users, total_drinks } = data;
 
-                // Determine medal based on rank (only if count > 0)
+            // Update personal drink count display
+            if (currentUser && users.hasOwnProperty(currentUser)) {
+                drinkCountSpan.textContent = users[currentUser];
+            } else {
+                drinkCountSpan.textContent = '0'; // Should not happen if user is set correctly
+            }
+
+            // Update total drink count
+            totalDrinkCountSpan.textContent = total_drinks;
+
+            // Render the leaderboard
+            renderLeaderboard(users, total_drinks);
+        }
+
+        function renderLeaderboard(users, total_drinks) {
+            leaderboardDiv.innerHTML = ''; // Clear previous leaderboard
+
+            // Convert users object to an array of [name, count] pairs
+            const sortedUsers = Object.entries(users || {})
+                                    .sort(([nameA, countA], [nameB, countB]) => {
+                                        if (countB !== countA) return countB - countA;
+                                        return String(nameA).localeCompare(String(nameB));
+                                    });
+
+            if (sortedUsers.length === 0) {
+                leaderboardDiv.innerHTML = '<p class="text-center text-gray-500 dark:text-gray-400">No one has joined yet!</p>';
+                return;
+            }
+
+            sortedUsers.forEach(([name, count], index) => {
+                const rank = index + 1;
+                const isCurrentUser = name === currentUser;
+
                 let medal = '';
                 if (rank === 1 && count > 0) medal = '🥇';
                 else if (rank === 2 && count > 0) medal = '🥈';
                 else if (rank === 3 && count > 0) medal = '🥉';
 
-                // Create the list item element
                 const listItem = document.createElement('div');
-                // Apply styling, highlighting the current user
                 listItem.className = `flex justify-between items-center p-3 rounded-lg ${isCurrentUser ? 'bg-indigo-100 dark:bg-indigo-900 ring-2 ring-indigo-500' : 'bg-gray-50 dark:bg-gray-700'}`;
 
-                // Set the inner HTML for the list item
-                listItem.innerHTML = `
-                    <div class="flex items-center">
-                        <span class="text-lg font-semibold w-8 text-center mr-2">${rank}.</span>
-                        <span class="text-lg font-medium ${isCurrentUser ? 'text-indigo-800 dark:text-indigo-200' : 'text-gray-800 dark:text-gray-200'}">${name} ${isCurrentUser ? '(You)' : ''}</span>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="text-2xl font-bold ${isCurrentUser ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-100'}">${count}</span>
-                        <span class="text-xl ml-2 w-6 text-center">${medal}</span>
-                    </div>
+                // User info and rank
+                const userInfoDiv = document.createElement('div');
+                userInfoDiv.className = 'flex items-center flex-grow mr-2'; // Added flex-grow and mr-2
+                userInfoDiv.innerHTML = `
+                    <span class="text-lg font-semibold w-8 text-center mr-2">${rank}.</span>
+                    <span class="text-lg font-medium truncate ${isCurrentUser ? 'text-indigo-800 dark:text-indigo-200' : 'text-gray-800 dark:text-gray-200'}">${name} ${isCurrentUser ? '(You)' : ''}</span>
                 `;
-                // Add the new list item to the leaderboard div
+
+                // Count, medal, and delete button
+                const controlsDiv = document.createElement('div');
+                controlsDiv.className = 'flex items-center flex-shrink-0'; // Added flex-shrink-0
+
+                 // Delete button (only show if it's NOT the current user)
+                let deleteButtonHtml = '';
+                if (!isCurrentUser && currentUser) { // Only show delete if someone is logged in, and it's not them
+                     deleteButtonHtml = `
+                        <button class="delete-user-btn text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 ml-3 p-1 focus:outline-none" data-username="${name}" title="Delete ${name}">
+                            <i class="fas fa-trash-alt fa-sm"></i>
+                        </button>
+                    `;
+                }
+
+
+                controlsDiv.innerHTML = `
+                    <span class="text-2xl font-bold ${isCurrentUser ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-100'}">${count}</span>
+                    <span class="text-xl ml-2 w-6 text-center">${medal}</span>
+                    ${deleteButtonHtml}
+                `;
+
+
+                listItem.appendChild(userInfoDiv);
+                listItem.appendChild(controlsDiv);
                 leaderboardDiv.appendChild(listItem);
+
+                 // Add event listener for the delete button if it exists
+                if (!isCurrentUser && currentUser) {
+                    const deleteBtn = listItem.querySelector('.delete-user-btn');
+                    if (deleteBtn) {
+                         deleteBtn.addEventListener('click', handleDeleteUser);
+                    }
+                }
             });
         }
 
-        // --- Initial Load ---
-        // Load data when the script runs
-        loadData();
+        // --- View Management ---
+        function showUserSetupView() {
+            userSetupDiv.classList.remove('hidden');
+            counterSection.classList.add('hidden');
+            leaderboardSection.classList.add('hidden');
+            usernameInput.value = '';
+            usernameInput.focus();
+            currentUser = null;
+            localStorage.removeItem(CURRENT_USER_LOCAL_STORAGE_KEY); // Clear remembered user
+            clearError(); // Clear any previous errors
+        }
+
+        async function showCounterView() {
+            if (!currentUser) return;
+
+            userSetupDiv.classList.add('hidden');
+            counterSection.classList.remove('hidden');
+            leaderboardSection.classList.remove('hidden');
+            currentUsernameSpan.textContent = currentUser;
+
+            // Fetch initial data when showing the counter view
+            const data = await fetchData();
+            if (data) {
+                updateDisplay(data);
+            }
+        }
+
+        // --- Event Handlers ---
+        setUsernameBtn.addEventListener('click', async () => {
+            const name = usernameInput.value.trim();
+            if (name) {
+                usernameError.classList.add('hidden');
+                currentUser = name;
+                localStorage.setItem(CURRENT_USER_LOCAL_STORAGE_KEY, currentUser); // Remember user locally
+
+                // Check if user exists, if not, add them
+                const data = await fetchData(); // Fetch current state first
+                if (data && !data.users.hasOwnProperty(currentUser)) {
+                    const addResult = await postData(`${API_BASE_URL}/user`, { name: currentUser });
+                    if (!addResult) {
+                        // Error handled by postData, maybe revert state?
+                        currentUser = null;
+                         localStorage.removeItem(CURRENT_USER_LOCAL_STORAGE_KEY);
+                        return; // Stop if adding user failed
+                    }
+                     // Re-fetch data after adding user to ensure consistency
+                     await showCounterView();
+                } else if (data) {
+                     // User already exists, just show the counter view
+                     await showCounterView();
+                 } else {
+                     // Fetch data failed, error shown by fetchData
+                     currentUser = null; // Reset state
+                     localStorage.removeItem(CURRENT_USER_LOCAL_STORAGE_KEY);
+                 }
+
+            } else {
+                usernameError.classList.remove('hidden');
+            }
+        });
+
+        usernameInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                setUsernameBtn.click();
+            }
+        });
+
+        addDrinkBtn.addEventListener('click', async () => {
+            if (currentUser) {
+                const result = await postData(`${API_BASE_URL}/drink/${currentUser}`, {});
+                if (result) {
+                    const data = await fetchData(); // Refresh data after action
+                    if (data) updateDisplay(data);
+                }
+            }
+        });
+
+        removeDrinkBtn.addEventListener('click', async () => {
+            if (currentUser) {
+                 // Optional: Check current count locally first to prevent unnecessary API calls if count is 0
+                // const currentCount = parseInt(drinkCountSpan.textContent, 10);
+                // if (currentCount <= 0) return;
+
+                const result = await deleteResource(`${API_BASE_URL}/drink/${currentUser}`);
+                 if (result) {
+                    const data = await fetchData(); // Refresh data after action
+                    if (data) updateDisplay(data);
+                }
+            }
+        });
+
+        changeUserBtn.addEventListener('click', () => {
+            showUserSetupView();
+        });
+
+        resetAllBtn.addEventListener('click', async () => {
+            if (confirm("Are you sure you want to reset all drink counts for everyone? This cannot be undone.")) {
+                const result = await postData(`${API_BASE_URL}/reset`, {});
+                if (result) {
+                    const data = await fetchData(); // Refresh data after action
+                    if (data) updateDisplay(data);
+                }
+            }
+        });
+
+         async function handleDeleteUser(event) {
+            // Find the button that was clicked, even if the click was on the icon inside it
+            const button = event.target.closest('.delete-user-btn');
+            if (!button) return;
+
+            const userToDelete = button.dataset.username;
+             if (userToDelete && confirm(`Are you sure you want to delete user "${userToDelete}"? This cannot be undone.`)) {
+                const result = await deleteResource(`${API_BASE_URL}/user/${userToDelete}`);
+                if (result) {
+                    const data = await fetchData(); // Refresh data
+                    if (data) updateDisplay(data);
+                }
+            }
+        }
+
+        clearErrorBtn.addEventListener('click', clearError);
+
+
+        // --- Initialization ---
+        function initializeApp() {
+            // Check if a user was remembered in local storage
+            const rememberedUser = localStorage.getItem(CURRENT_USER_LOCAL_STORAGE_KEY);
+            if (rememberedUser) {
+                 // Validate if user still exists on backend before setting
+                 showLoading(); // Show loading while checking
+                 fetch(`${API_BASE_URL}/data`)
+                    .then(response => {
+                         if (!response.ok) throw new Error('Network response was not ok.');
+                         return response.json();
+                     })
+                    .then(data => {
+                        if (data && data.users && data.users.hasOwnProperty(rememberedUser)) {
+                            currentUser = rememberedUser;
+                            showCounterView(); // Show counter view for remembered user
+                        } else {
+                             // Remembered user doesn't exist on backend anymore
+                             showUserSetupView();
+                         }
+                     })
+                    .catch(error => {
+                        console.error("Error validating remembered user:", error);
+                        showError("Could not verify previous session. Please enter your name.");
+                        showUserSetupView(); // Fallback to setup view on error
+                    })
+                    .finally(() => {
+                        hideLoading();
+                    });
+            } else {
+                showUserSetupView(); // No remembered user, show setup
+            }
+        }
+
+        // Start the application
+        initializeApp();
 
     </script>
 </body>
